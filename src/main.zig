@@ -3,117 +3,141 @@ const testing = std.testing;
 
 const Client = @import("requestz").Client;
 
-const Update = struct {
+pub const Update = struct {
     updateId: i64,
     chatId: i64,
     text: []const u8,
 };
 
-const GetUpdatesError = error{
+pub const GetUpdatesError = error{
     NoMessages
 };
 
-pub fn runEchoBot() anyerror!void {
-    var buffer: [94]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const token_allocator = fba.allocator();
+//Get the token from the user
+//Get the loop time (interval)
+//Callback function
 
-    const token = try getToken(token_allocator);
-    defer token_allocator.free(token);
 
-    var updateId: i64 = undefined;
+// const TelezigCallback = struct {
+//     allocator: std.mem.Allocator
 
-    while (true) {
-        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        defer arena.deinit();
-        const allocator = arena.allocator();
+//     pub fn onMessage(text: []const u8) void {
+//         std.debug.print(text);
+//     }
+// }
 
-        var client = try Client.init(allocator);
-        defer client.deinit();
+pub const Telezig = struct {
+    allocator: std.mem.Allocator,
+    client: Client,
+    token: []const u8,
 
-        defer std.time.sleep(1e+10);
-        var update = try getUpdates(allocator, client, token);
-        defer allocator.free(update.text);
+    pub fn init(allocator: std.mem.Allocator, tokenPath: []const u8) !Telezig {
+        const client = try Client.init(allocator);
+        const token = try getToken(allocator, tokenPath);
+        return Telezig { .allocator = allocator, .client = client, .token = token  };        
+    }
 
-        var newUpdateId = update.updateId;
-        if (updateId == newUpdateId) {
-            continue;
+    pub fn deinit(self: *Telezig) void {
+        self.client.deinit();
+        self.allocator.free(self.token);
+    }
+
+    pub fn runEchoBot(self: *Telezig, tokenPath: []const u8, intervalSeconds: u64, callbackAlloc: fn (update: Update) void) anyerror!void {
+        var updateId: i64 = undefined;
+
+        while (true) {
+            // var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            // defer arena.deinit();
+            // const allocator = arena.allocator();
+
+            defer std.time.sleep(intervalSeconds * std.time.ns_per_s);
+            var update = try self.getUpdates(token);
+            defer self.allocator.free(update.text);
+
+            var newUpdateId = update.updateId;
+            if (updateId == newUpdateId) {
+                continue;
+            }
+
+            updateId = newUpdateId;
+            //try sendMessage(allocator, client, token, update);
+            callbackAlloc(update);
+        }
+    }
+
+    fn getToken(allocator: std.mem.Allocator, tokenPath: []const u8) ![]u8 {
+        const file = try std.fs.cwd().openFile(
+            tokenPath,
+            .{ .mode = .read_only }
+        );
+        defer file.close();
+
+        const token_length = 46;
+
+        const token_file = try file.reader().readAllAlloc(
+            allocator,
+            token_length+1, //The last character should be ignored
+        );
+        defer allocator.free(token_file);
+
+        const token = allocator.dupe(u8, token_file[0..token_length]);
+        return token;
+    }
+
+    fn getUpdates(self: *Telezig, token: []u8) !Update {
+        const methodName = "getUpdates?offset=-1";
+        const telegramUrlTemplate = "https://api.telegram.org/bot{s}/" ++ methodName;
+        const telegramUrl = try std.fmt.allocPrint(self.allocator, telegramUrlTemplate, .{ token });
+        defer self.allocator.free(telegramUrl);
+
+        var response = try self.client.get(telegramUrl, .{});
+
+        var tree = try response.json();
+        defer tree.deinit();
+        
+        var result = tree.root.Object.get("result").?;
+
+        if (result.Array.items.len < 1) {
+            return GetUpdatesError.NoMessages;
         }
 
-        updateId = newUpdateId;
-        try sendMessage(allocator, client, token, update);
-    }
-}
+        var lastIndex = result.Array.items.len - 1;
+        var updateId = result.Array.items[0].Object.get("update_id").?.Integer;
+        var message = result.Array.items[lastIndex].Object.get("message").?;
+        var text = message.Object.get("text").?;
+        var chat = message.Object.get("chat").?;
+        var chatId = chat.Object.get("id").?;
 
-fn getToken(allocator: std.mem.Allocator) ![]u8 {
-    const file = try std.fs.cwd().openFile(
-        "token.txt",
-        .{ .mode = .read_only }
-    );
-    defer file.close();
-
-    const token_length = 46;
-
-    const token_file = try file.reader().readAllAlloc(
-        allocator,
-        token_length+1, //The last character should be ignored
-    );
-    defer allocator.free(token_file);
-
-    const token = allocator.dupe(u8, token_file[0..token_length]);
-    return token;
-}
-
-fn getUpdates(allocator: std.mem.Allocator, client: Client, token: []u8) !Update {
-    const methodName = "getUpdates?offset=-1";
-    const telegramUrlTemplate = "https://api.telegram.org/bot{s}/" ++ methodName;
-    const telegramUrl = try std.fmt.allocPrint(allocator, telegramUrlTemplate, .{ token });
-
-    var response = try client.get(telegramUrl, .{});
-
-    var tree = try response.json();
-    defer tree.deinit();
-    
-    var result = tree.root.Object.get("result").?;
-
-    if (result.Array.items.len < 1) {
-        return GetUpdatesError.NoMessages;
+        return Update{
+            .updateId = updateId,
+            .chatId = chatId.Integer,
+            .text = try self.allocator.dupe(u8, text.String),
+        };
     }
 
-    var lastIndex = result.Array.items.len - 1;
-    var updateId = result.Array.items[0].Object.get("update_id").?.Integer;
-    var message = result.Array.items[lastIndex].Object.get("message").?;
-    var text = message.Object.get("text").?;
-    var chat = message.Object.get("chat").?;
-    var chatId = chat.Object.get("id").?;
+    pub fn sendMessage(self: *Telezig, update: Update) !void {
+        const messageMethod = "sendMessage";
+        const sendMessageUrlTemplate = "https://api.telegram.org/bot{s}/" ++ messageMethod;
+        const sendMessageUrl = try std.fmt.allocPrint(self.allocator, sendMessageUrlTemplate, .{ token });
+        defer self.allocator.free(sendMessageUrl);
 
-    return Update{
-        .updateId = updateId,
-        .chatId = chatId.Integer,
-        .text = try allocator.dupe(u8, text.String),
-    };
-}
+        const rawJson = \\ {{ "chat_id": {d}, "text": "{s}" }}
+        ;
 
-fn sendMessage(allocator: std.mem.Allocator, client: Client, token: []u8, update: Update) !void {
-    const messageMethod = "sendMessage";
-    const sendMessageUrlTemplate = "https://api.telegram.org/bot{s}/" ++ messageMethod;
-    const sendMessageUrl = try std.fmt.allocPrint(allocator, sendMessageUrlTemplate, .{ token });
+        const echoResponseJsonString = try std.fmt.allocPrint(self.allocator, rawJson, .{ update.chatId, update.text });
+        const echoComplete = try std.fmt.allocPrint(self.allocator, "{s}", .{echoResponseJsonString});
+        defer self.allocator.free(echoResponseJsonString);
+        defer self.allocator.free(echoComplete);
 
-    const rawJson = \\ {{ "chat_id": {d}, "text": "{s}" }}
-    ;
+        var headers = .{.{ "Content-Type", "application/json" }};
 
-    const echoResponseJsonString = try std.fmt.allocPrint(allocator, rawJson, .{ update.chatId, update.text });
-    const echoComplete = try std.fmt.allocPrint(allocator, "{s}", .{echoResponseJsonString});
-    defer allocator.free(echoResponseJsonString);
+        std.debug.print("\n echoComplete: {s}\n", .{echoComplete});
 
-    var headers = .{.{ "Content-Type", "application/json" }};
+        var response1 = try self.client.post(sendMessageUrl, .{ .content = echoComplete, .headers = headers });
+        defer response1.deinit();
 
-    std.debug.print("\n echoComplete: {s}\n", .{echoComplete});
-
-    var response1 = try client.post(sendMessageUrl, .{ .content = echoComplete, .headers = headers });
-    defer response1.deinit();
-
-    std.debug.print("\n{s}\n", .{response1.body});
+        std.debug.print("\n{s}\n", .{response1.body});
+    }
 }
 
 // export fn add(a: i32, b: i32) i32 {
