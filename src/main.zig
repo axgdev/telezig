@@ -120,6 +120,6 @@ fn sendMessage(allocator: std.mem.Allocator, client: Client, token: []u8, update
 //     return a + b;
 // }
 
-test "basic add functionality" {
-    try testing.expect(add(3, 7) == 10);
-}
+// test "basic add functionality" {
+//     try testing.expect(add(3, 7) == 10);
+// }
