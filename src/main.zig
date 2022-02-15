@@ -42,7 +42,7 @@ pub const Telezig = struct {
         self.allocator.free(self.token);
     }
 
-    pub fn runEchoBot(self: *Telezig, tokenPath: []const u8, intervalSeconds: u64, callbackAlloc: fn (update: Update) void) anyerror!void {
+    pub fn runEchoBot(self: *Telezig, intervalSeconds: u64, callbackAlloc: fn (update: Update) void) anyerror!void {
         var updateId: i64 = undefined;
 
         while (true) {
@@ -51,7 +51,7 @@ pub const Telezig = struct {
             // const allocator = arena.allocator();
 
             defer std.time.sleep(intervalSeconds * std.time.ns_per_s);
-            var update = try self.getUpdates(token);
+            var update = try self.getUpdates();
             defer self.allocator.free(update.text);
 
             var newUpdateId = update.updateId;
@@ -84,10 +84,10 @@ pub const Telezig = struct {
         return token;
     }
 
-    fn getUpdates(self: *Telezig, token: []u8) !Update {
+    fn getUpdates(self: *Telezig) !Update {
         const methodName = "getUpdates?offset=-1";
         const telegramUrlTemplate = "https://api.telegram.org/bot{s}/" ++ methodName;
-        const telegramUrl = try std.fmt.allocPrint(self.allocator, telegramUrlTemplate, .{ token });
+        const telegramUrl = try std.fmt.allocPrint(self.allocator, telegramUrlTemplate, .{ self.token });
         defer self.allocator.free(telegramUrl);
 
         var response = try self.client.get(telegramUrl, .{});
@@ -118,7 +118,7 @@ pub const Telezig = struct {
     pub fn sendMessage(self: *Telezig, update: Update) !void {
         const messageMethod = "sendMessage";
         const sendMessageUrlTemplate = "https://api.telegram.org/bot{s}/" ++ messageMethod;
-        const sendMessageUrl = try std.fmt.allocPrint(self.allocator, sendMessageUrlTemplate, .{ token });
+        const sendMessageUrl = try std.fmt.allocPrint(self.allocator, sendMessageUrlTemplate, .{ self.token });
         defer self.allocator.free(sendMessageUrl);
 
         const rawJson = \\ {{ "chat_id": {d}, "text": "{s}" }}
