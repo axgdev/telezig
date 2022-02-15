@@ -13,7 +13,7 @@ const GetUpdatesError = error{
     NoMessages
 };
 
-pub fn runEchoBot() anyerror!void {
+export fn runEchoBot() anyerror!void {
     var buffer: [94]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     const token_allocator = fba.allocator();
