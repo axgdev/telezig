@@ -1,16 +1,15 @@
 pkgs:
   telezig:
     version: 0.0.1
-    root: src/main.zig
     description: Telegram bot library for Zig 🦎
     license: MIT
     source_url: "https://github.com/axgdev/telezig"
     tags: http
+    root: src/main.zig
     files:
       README.md
       LICENSE.txt
       src/*.zig
-
 deps:
   requestz:
     git:
