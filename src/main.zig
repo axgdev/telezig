@@ -29,7 +29,7 @@ pub const Telezig = struct {
         self.allocator.free(self.token);
     }
 
-    pub fn runEchoBot(self: Telezig, intervalSeconds: u64, callback: fn (self: Telezig, update: Update) void) anyerror!void {
+    pub fn runEchoBot(self: Telezig, intervalSeconds: u64, onMessageReceived: fn (self: Telezig, update: Update) void) anyerror!void {
         var updateId: i64 = undefined;
 
         while (true) {
@@ -48,7 +48,7 @@ pub const Telezig = struct {
 
             updateId = newUpdateId;
             //try sendMessage(allocator, client, token, update);
-            callback(self, update);
+            onMessageReceived(self, update);
         }
     }
 
