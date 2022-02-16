@@ -13,19 +13,6 @@ pub const GetUpdatesError = error{
     NoMessages
 };
 
-//Get the token from the user
-//Get the loop time (interval)
-//Callback function
-
-
-// const TelezigCallback = struct {
-//     allocator: std.mem.Allocator
-
-//     pub fn onMessage(text: []const u8) void {
-//         std.debug.print(text);
-//     }
-// }
-
 pub const Telezig = struct {
     allocator: std.mem.Allocator,
     client: Client,
@@ -95,23 +82,25 @@ pub const Telezig = struct {
         var tree = try response.json();
         defer tree.deinit();
         
-        var result = tree.root.Object.get("result").?;
+        var result = tree.root.Object.get("result").?.Array;
+        defer result.deinit();
 
-        if (result.Array.items.len < 1) {
+        if (result.items.len < 1) {
             return GetUpdatesError.NoMessages;
         }
 
-        var lastIndex = result.Array.items.len - 1;
-        var updateId = result.Array.items[0].Object.get("update_id").?.Integer;
-        var message = result.Array.items[lastIndex].Object.get("message").?;
-        var text = message.Object.get("text").?;
+        var lastIndex = result.items.len - 1;
+        var updateId = result.items[0].Object.get("update_id").?.Integer;
+        var message = result.items[lastIndex].Object.get("message").?;
+        var text = message.Object.get("text").?.String;
+        defer self.allocator.free(text);
         var chat = message.Object.get("chat").?;
         var chatId = chat.Object.get("id").?;
 
         return Update{
             .updateId = updateId,
             .chatId = chatId.Integer,
-            .text = try self.allocator.dupe(u8, text.String),
+            .text = try self.allocator.dupe(u8, text),
         };
     }
 
