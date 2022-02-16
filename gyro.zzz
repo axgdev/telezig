@@ -14,5 +14,5 @@ deps:
   requestz:
     git:
       url: "https://github.com/axgdev/requestz.git"
-      ref: 8401c92d922360217605ca46042a730747143fa8
+      ref: ec8b46ea7d62bc579d94338915ef2c0d57296620
       root: src/main.zig
