@@ -24,7 +24,7 @@ pub const Telezig = struct {
         return Telezig { .allocator = allocator, .client = client, .token = token  };        
     }
 
-    pub fn deinit(self: Telezig) void {
+    pub fn deinit(self: *Telezig) void {
         self.client.deinit();
         self.allocator.free(self.token);
     }
