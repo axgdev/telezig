@@ -14,22 +14,23 @@ gyro add --src github axgdev/telezig
 
 ## Usage
 
-Echo bot example
-Write a callback function
+Echo bot example:
+
+- Write a callback function
 ```zig
-fn onMessageReceived1(telezig: Telezig, update: Update) void {
+fn onMessageReceived(telezig: Telezig, update: Update) void {
     telezig.sendMessage(.{ .update_id = update.update_id, .chat_id = update.chat_id, .text = update.text }) catch unreachable;
 }
 ```
 
-Write the loop runner
+- Write the loop runner
 ```zig
 test "Echobot test" {
     var allocator = std.testing.allocator;
     //Make sure that the token.txt containts the telegram bot token you want to use
     var telezig = try Telezig.init(allocator, "token.txt");
     //This next method will run the loop, it will block until killed
-    try telezig.runEchoBot(10, onMessageReceived1);
+    try telezig.runEchoBot(10, onMessageReceived);
 }
 ```
 ## Dependencies
