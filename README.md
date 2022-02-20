@@ -25,13 +25,11 @@ fn onMessageReceived(telezig: Telezig, update: Update) void {
 
 - Write the loop runner
 ```zig
-test "Echobot test" {
-    var allocator = std.testing.allocator;
-    //Make sure that the token.txt containts the telegram bot token you want to use
-    var telezig = try Telezig.init(allocator, "token.txt");
-    //This next method will run the loop, it will block until killed
-    try telezig.runEchoBot(10, onMessageReceived);
-}
+var allocator = std.testing.allocator;
+//Make sure that the token.txt containts the telegram bot token you want to use
+var telezig = try Telezig.init(allocator, "token.txt");
+//This next method will run the loop, it will block until killed
+try telezig.runEchoBot(10, onMessageReceived);
 ```
 ## Dependencies
 
