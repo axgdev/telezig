@@ -3,8 +3,8 @@ const testing = std.testing;
 const request = @import("request.zig");
 
 pub const Update = struct {
-    updateId: i64,
-    chatId: i64,
+    update_id: i64,
+    chat_id: i64,
     text: []const u8,
 };
 
@@ -16,8 +16,8 @@ pub const Telezig = struct {
     allocator: std.mem.Allocator,
     token: []const u8,
 
-    pub fn init(allocator: std.mem.Allocator, tokenPath: []const u8) !Telezig {
-        const token = try getToken(allocator, tokenPath);
+    pub fn init(allocator: std.mem.Allocator, token_path: []const u8) !Telezig {
+        const token = try getToken(allocator, token_path);
         return Telezig { .allocator = allocator, .token = token  };        
     }
 
@@ -25,34 +25,27 @@ pub const Telezig = struct {
         self.allocator.free(self.token);
     }
 
-    pub fn runEchoBot(self: Telezig, intervalSeconds: u64, onMessageReceived: fn (self: Telezig, update: Update) void) anyerror!void {
-        var updateId: i64 = undefined;
+    pub fn runEchoBot(self: Telezig, interval_seconds: u64, onMessageReceived: fn (self: Telezig, update: Update) void) anyerror!void {
+        var update_id: i64 = undefined;
 
         while (true) {
-            // var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-            // defer arena.deinit();
-            // const allocator = arena.allocator();
-
-            defer std.time.sleep(intervalSeconds * std.time.ns_per_s);
-            // std.log.err("Getting updates", .{});
+            defer std.time.sleep(interval_seconds * std.time.ns_per_s);
             var update = try self.getUpdates();
             defer self.allocator.free(update.text);
 
-            var newUpdateId = update.updateId;
-            if (updateId == newUpdateId) {
+            var new_update_id = update.update_id;
+            if (update_id == new_update_id) {
                 continue;
             }
 
-            updateId = newUpdateId;
-            //try sendMessage(allocator, client, token, update);
-            onMessageReceived(self, update);
-            //break;
+            update_id = new_update_id;
+            onMessageReceived(self, update);            
         }
     }
 
-    fn getToken(allocator: std.mem.Allocator, tokenPath: []const u8) ![]u8 {
+    fn getToken(allocator: std.mem.Allocator, token_path: []const u8) ![]u8 {
         const file = try std.fs.cwd().openFile(
-            tokenPath,
+            token_path,
             .{ .mode = .read_only }
         );
         defer file.close();
@@ -72,13 +65,10 @@ pub const Telezig = struct {
     fn getUpdates(self: Telezig) !Update {
         const host = "api.telegram.org";
         const path = "/bot{s}" ++ "/getUpdates?offset=-1";
-        const formattedPath = try std.fmt.allocPrint(self.allocator, path, .{ self.token });
-        defer self.allocator.free(formattedPath);
+        const formatted_path = try std.fmt.allocPrint(self.allocator, path, .{ self.token });
+        defer self.allocator.free(formatted_path);
 
-        var response = try request.makeGetRequestAlloc(self.allocator, host, formattedPath);
-        //defer self.allocator.free(response);
-
-        // std.log.err("Response is: {s}", .{response});
+        var response = try request.makeGetRequestAlloc(self.allocator, host, formatted_path);
 
         var parser = std.json.Parser.init(self.allocator, false);
         defer parser.deinit();
@@ -87,23 +77,22 @@ pub const Telezig = struct {
         defer tree.deinit();
         
         var result = tree.root.Object.get("result").?.Array;
-        //defer result.deinit(); //This deinit causes a segmentation fault
 
         if (result.items.len < 1) {
             return GetUpdatesError.NoMessages;
         }
 
         var lastIndex = result.items.len - 1;
-        var updateId = result.items[0].Object.get("update_id").?.Integer;
+        var update_id = result.items[0].Object.get("update_id").?.Integer;
         var message = result.items[lastIndex].Object.get("message").?;
         var text = message.Object.get("text").?.String;
         defer self.allocator.free(text);
         var chat = message.Object.get("chat").?;
-        var chatId = chat.Object.get("id").?;
+        var chat_id = chat.Object.get("id").?;
 
         return Update{
-            .updateId = updateId,
-            .chatId = chatId.Integer,
+            .update_id = update_id,
+            .chat_id = chat_id.Integer,
             .text = try self.allocator.dupe(u8, text),
         };
     }
@@ -111,32 +100,25 @@ pub const Telezig = struct {
     pub fn sendMessage(self: Telezig, update: Update) !void {
         const host = "api.telegram.org";
         const path = "/bot{s}" ++ "/sendMessage";
-        const formattedPath = try std.fmt.allocPrint(self.allocator, path, .{ self.token });
-        defer self.allocator.free(formattedPath);
+        const formatted_path = try std.fmt.allocPrint(self.allocator, path, .{ self.token });
+        defer self.allocator.free(formatted_path);
 
-        const rawJson = \\ {{ "chat_id": {d}, "text": "{s}" }}
+        const raw_json = \\ {{ "chat_id": {d}, "text": "{s}" }}
         ;
 
-        const echoResponseJsonString = try std.fmt.allocPrint(self.allocator, rawJson, .{ update.chatId, update.text });
-        const echoComplete = try std.fmt.allocPrint(self.allocator, "{s}", .{echoResponseJsonString});
-        defer self.allocator.free(echoResponseJsonString);
-        defer self.allocator.free(echoComplete);
+        const echo_response_json_string = try std.fmt.allocPrint(self.allocator, raw_json, .{ update.chat_id, update.text });
+        const echo_complete = try std.fmt.allocPrint(self.allocator, "{s}", .{echo_response_json_string});
+        defer self.allocator.free(echo_response_json_string);
+        defer self.allocator.free(echo_complete);
 
-        //var headers = .{.{ "Content-Type", "application/json" }};
-
-        // std.log.err("\n echoComplete: {s}\n", .{echoComplete});
-
-        var response = try request.makePostRequestAlloc(self.allocator, host, formattedPath, echoComplete, "Content-Type: application/json");
-        // var response1 = try self.client.post(sendMessageUrl, .{ .content = echoComplete, .headers = headers });
+        var response = try request.makePostRequestAlloc(self.allocator, host, formatted_path, echo_complete, "Content-Type: application/json");
         defer self.allocator.free(response);
-
-        // std.log.info("\n{s}\n", .{response});
     }
 };
 
 //Test function, do not use for library
 fn onMessageReceived1(telezig: Telezig, update: Update) void { 
-    telezig.sendMessage(.{ .updateId = update.updateId, .chatId = update.chatId, .text = update.text }) catch unreachable;
+    telezig.sendMessage(.{ .update_id = update.update_id, .chat_id = update.chat_id, .text = update.text }) catch unreachable;
 }
 
 test "Echobot test" {
@@ -148,11 +130,3 @@ test "Echobot test" {
     defer telezig.deinit();
     try telezig.runEchoBot(10, onMessageReceived1);
 }
-
-// export fn add(a: i32, b: i32) i32 {
-//     return a + b;
-// }
-
-// test "basic add functionality" {
-//     try testing.expect(add(3, 7) == 10);
-// }
