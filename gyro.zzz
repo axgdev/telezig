@@ -11,8 +11,8 @@ pkgs:
       LICENSE.txt
       src/*.zig
 deps:
-  requestz:
+  iguanaTLS:
     git:
-      url: "https://github.com/axgdev/requestz.git"
-      ref: ec8b46ea7d62bc579d94338915ef2c0d57296620
+      url: "https://github.com/nektro/iguanaTLS.git"
+      ref: 9a05f03681d5f273d0ce7447f0c7e729828ab8a2
       root: src/main.zig

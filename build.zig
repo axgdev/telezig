@@ -12,6 +12,7 @@ pub fn build(b: *std.build.Builder) void {
     lib.install();
 
     const main_tests = b.addTest("src/main.zig");
+    pkgs.addAllTo(main_tests);
     main_tests.setBuildMode(mode);
 
     const test_step = b.step("test", "Run library tests");

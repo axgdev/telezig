@@ -1,7 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
-
-const Client = @import("requestz").Client;
+const request = @import("request.zig");
 
 pub const Update = struct {
     updateId: i64,
@@ -15,17 +14,14 @@ pub const GetUpdatesError = error{
 
 pub const Telezig = struct {
     allocator: std.mem.Allocator,
-    client: Client,
     token: []const u8,
 
     pub fn init(allocator: std.mem.Allocator, tokenPath: []const u8) !Telezig {
-        const client = try Client.init(allocator);
         const token = try getToken(allocator, tokenPath);
-        return Telezig { .allocator = allocator, .client = client, .token = token  };        
+        return Telezig { .allocator = allocator, .token = token  };        
     }
 
     pub fn deinit(self: *Telezig) void {
-        self.client.deinit();
         self.allocator.free(self.token);
     }
 
@@ -38,6 +34,7 @@ pub const Telezig = struct {
             // const allocator = arena.allocator();
 
             defer std.time.sleep(intervalSeconds * std.time.ns_per_s);
+            // std.log.err("Getting updates", .{});
             var update = try self.getUpdates();
             defer self.allocator.free(update.text);
 
@@ -49,6 +46,7 @@ pub const Telezig = struct {
             updateId = newUpdateId;
             //try sendMessage(allocator, client, token, update);
             onMessageReceived(self, update);
+            break;
         }
     }
 
@@ -72,14 +70,20 @@ pub const Telezig = struct {
     }
 
     fn getUpdates(self: Telezig) !Update {
-        const methodName = "getUpdates?offset=-1";
-        const telegramUrlTemplate = "https://api.telegram.org/bot{s}/" ++ methodName;
-        const telegramUrl = try std.fmt.allocPrint(self.allocator, telegramUrlTemplate, .{ self.token });
-        defer self.allocator.free(telegramUrl);
+        const host = "api.telegram.org";
+        const path = "/bot{s}" ++ "/getUpdates?offset=-1";
+        const formattedPath = try std.fmt.allocPrint(self.allocator, path, .{ self.token });
+        defer self.allocator.free(formattedPath);
 
-        var response = try self.client.get(telegramUrl, .{});
+        var response = try request.makeGetRequestAlloc(self.allocator, host, formattedPath);
+        //defer self.allocator.free(response);
 
-        var tree = try response.json();
+        // std.log.err("Response is: {s}", .{response});
+
+        var parser = std.json.Parser.init(self.allocator, false);
+        defer parser.deinit();
+        
+        var tree = try parser.parse(response);
         defer tree.deinit();
         
         var result = tree.root.Object.get("result").?.Array;
@@ -105,10 +109,10 @@ pub const Telezig = struct {
     }
 
     pub fn sendMessage(self: Telezig, update: Update) !void {
-        const messageMethod = "sendMessage";
-        const sendMessageUrlTemplate = "https://api.telegram.org/bot{s}/" ++ messageMethod;
-        const sendMessageUrl = try std.fmt.allocPrint(self.allocator, sendMessageUrlTemplate, .{ self.token });
-        defer self.allocator.free(sendMessageUrl);
+        const host = "api.telegram.org";
+        const path = "/bot{s}" ++ "/sendMessage";
+        const formattedPath = try std.fmt.allocPrint(self.allocator, path, .{ self.token });
+        defer self.allocator.free(formattedPath);
 
         const rawJson = \\ {{ "chat_id": {d}, "text": "{s}" }}
         ;
@@ -118,16 +122,32 @@ pub const Telezig = struct {
         defer self.allocator.free(echoResponseJsonString);
         defer self.allocator.free(echoComplete);
 
-        var headers = .{.{ "Content-Type", "application/json" }};
+        //var headers = .{.{ "Content-Type", "application/json" }};
 
-        std.debug.print("\n echoComplete: {s}\n", .{echoComplete});
+        // std.log.err("\n echoComplete: {s}\n", .{echoComplete});
 
-        var response1 = try self.client.post(sendMessageUrl, .{ .content = echoComplete, .headers = headers });
-        defer response1.deinit();
+        var response = try request.makePostRequestAlloc(self.allocator, host, formattedPath, echoComplete, "Content-Type: application/json");
+        // var response1 = try self.client.post(sendMessageUrl, .{ .content = echoComplete, .headers = headers });
+        defer self.allocator.free(response);
 
-        std.debug.print("\n{s}\n", .{response1.body});
+        // std.log.info("\n{s}\n", .{response});
     }
 };
+
+//Test function, do not use for library
+fn onMessageReceived1(telezig: Telezig, update: Update) void { 
+    telezig.sendMessage(.{ .updateId = update.updateId, .chatId = update.chatId, .text = update.text }) catch unreachable;
+}
+
+test "Echobot test" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer _ = gpa.deinit();
+    //var allocator = std.testing.allocator;
+    var telezig = try Telezig.init(allocator, "token.txt");
+    defer telezig.deinit();
+    try telezig.runEchoBot(10, onMessageReceived1);
+}
 
 // export fn add(a: i32, b: i32) i32 {
 //     return a + b;
