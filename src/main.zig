@@ -46,7 +46,7 @@ pub const Telezig = struct {
             updateId = newUpdateId;
             //try sendMessage(allocator, client, token, update);
             onMessageReceived(self, update);
-            break;
+            //break;
         }
     }
 
