@@ -87,7 +87,7 @@ pub const Telezig = struct {
         defer tree.deinit();
         
         var result = tree.root.Object.get("result").?.Array;
-        defer result.deinit();
+        //defer result.deinit(); //This deinit causes a segmentation fault
 
         if (result.items.len < 1) {
             return GetUpdatesError.NoMessages;
