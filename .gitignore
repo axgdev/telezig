@@ -1,9 +1,12 @@
 # Build artifacts
 zig-cache/
+zig-out/
 
 # Gyro
 deps.zig
 .gyro
 gyro.lock
-zig-out/
 build_runner.zig
+
+# remove token.txt from repository
+token.txt

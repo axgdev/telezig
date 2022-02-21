@@ -1,6 +1,7 @@
 const std = @import("std");
-const testing = std.testing;
 const request = @import("request.zig");
+const builtin = @import("builtin");
+const testing = std.testing;
 
 pub const Update = struct {
     update_id: i64,
@@ -10,50 +11,25 @@ pub const Update = struct {
 
 pub const GetUpdatesError = error{NoMessages};
 
-pub const TOKEN_LENGTH = 46;
-
 pub const Telezig = struct {
     allocator: std.mem.Allocator,
-    token: [TOKEN_LENGTH]u8,
+    token: [46]u8,
 
-    pub fn init(allocator: std.mem.Allocator, token_path: []const u8) !Telezig {
-        var token_buffer = [_]u8{undefined} ** TOKEN_LENGTH;
-        try getToken(token_path, &token_buffer);
-        return Telezig{ .allocator = allocator, .token = token_buffer };
+    pub fn init(allocator: std.mem.Allocator, token: []const u8) !Telezig {
+        if (token.len != 46) return error.BadToken;
+        var result = Telezig{.allocator = allocator, .token = undefined};
+        std.mem.copy(u8, result.token[0..], token);
+        return result;
     }
 
     // pub fn deinit(self: *Telezig) void {
     //     //For future deiniting
     // }
 
-    pub fn runEchoBot(self: Telezig, interval_seconds: u64, onMessageReceived: fn (self: Telezig, update: Update) void) anyerror!void {
-        var update_id: i64 = std.math.minInt(i64);
-
-        while (true) {
-            defer std.time.sleep(interval_seconds * std.time.ns_per_s);
-            var update = try self.getUpdates();
-            defer self.allocator.free(update.text);
-
-            var new_update_id = update.update_id;
-            if (update_id == new_update_id) {
-                continue;
-            }
-
-            update_id = new_update_id;
-            onMessageReceived(self, update);
-        }
-    }
-
-    fn getToken(token_path: []const u8, token_buffer: *[TOKEN_LENGTH]u8) !void {
-        const file = try std.fs.cwd().openFile(token_path, .{ .mode = .read_only });
-        defer file.close();
-        _ = try file.reader().readAll(token_buffer[0..]);
-    }
-
-    fn getUpdates(self: Telezig) !Update {
+    pub fn getUpdates(self: Telezig) !Update {
         const host = "api.telegram.org";
         const path = "/bot{s}" ++ "/getUpdates?offset=-1";
-        var buffer = [_]u8{undefined} ** (host.len + path.len + TOKEN_LENGTH);
+        var buffer = [_]u8{undefined} ** (host.len + path.len + self.token.len);
         const formatted_path = try std.fmt.bufPrint(&buffer, path, .{self.token});
 
         var response = try request.makeGetRequestAlloc(self.allocator, host, formatted_path);
@@ -88,7 +64,7 @@ pub const Telezig = struct {
     pub fn sendMessage(self: Telezig, update: Update) !void {
         const host = "api.telegram.org";
         const path = "/bot{s}" ++ "/sendMessage";
-        var buffer = [_]u8{undefined} ** (host.len + path.len + TOKEN_LENGTH);
+        var buffer = [_]u8{undefined} ** (host.len + path.len + self.token.len);
         const formatted_path = try std.fmt.bufPrint(&buffer, path, .{self.token});
 
         const echo_complete = try std.fmt.allocPrint(self.allocator, "{{ \"chat_id\": {d}, \"text\": \"{s}\" }}", .{ update.chat_id, update.text });
@@ -99,16 +75,40 @@ pub const Telezig = struct {
     }
 };
 
-//Test function, do not use for library
-fn onMessageReceived1(telezig: Telezig, update: Update) void {
-    telezig.sendMessage(.{ .update_id = update.update_id, .chat_id = update.chat_id, .text = update.text }) catch unreachable;
+
+// not related to library, for testing usage only
+fn getToken(token_path: []const u8, buffer: []u8) !void {
+    const file = try std.fs.cwd().openFile(token_path, .{ .mode = .read_only });
+    defer file.close();
+    _ = try file.reader().read(buffer);
 }
 
+// requires token.txt file in working directory
+// checks for message 10 times with 1 second interval
+// replies to new messages with same text
 test "Echobot test" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer _ = gpa.deinit();
-    //var allocator = std.testing.allocator;
-    var telezig = try Telezig.init(allocator, "token.txt");
-    try telezig.runEchoBot(10, onMessageReceived1);
+    // windows-only initialization
+    if (builtin.os.tag == std.Target.Os.Tag.windows) _ = try std.os.windows.WSAStartup(2, 0);
+    
+    var allocator = std.testing.allocator;
+    var token: [46]u8 = undefined;
+    try getToken("token.txt", token[0..]);
+    var bot = try Telezig.init(allocator, token[0..]);
+
+    var update_id: i64 = std.math.minInt(i64);
+    var i: usize = 0;
+    while (i < 10) : (i += 1) {
+        var update = try bot.getUpdates();
+        defer bot.allocator.free(update.text);
+
+        var new_update_id = update.update_id;
+        if (update_id == new_update_id) continue;
+        update_id = new_update_id;
+
+        try bot.sendMessage(update);
+        std.time.sleep(1 * std.time.ns_per_s);
+    }
+
+    // windows-only cleanup
+    if (builtin.os.tag == std.Target.Os.Tag.windows) try std.os.windows.WSACleanup();
 }
