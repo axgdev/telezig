@@ -1,6 +1,7 @@
 const std = @import("std");
-const testing = std.testing;
 const request = @import("request.zig");
+const builtin = @import("builtin");
+const testing = std.testing;
 
 pub const Update = struct {
     update_id: i64,
@@ -10,16 +11,14 @@ pub const Update = struct {
 
 pub const GetUpdatesError = error{NoMessages};
 
-pub const TOKEN_LENGTH = 46;
-
 pub const Telezig = struct {
     allocator: std.mem.Allocator,
-    token: [TOKEN_LENGTH]u8,
+    token: [46]u8,
 
     pub fn init(allocator: std.mem.Allocator, token_path: []const u8) !Telezig {
-        var token_buffer = [_]u8{undefined} ** TOKEN_LENGTH;
-        try getToken(token_path, &token_buffer);
-        return Telezig{ .allocator = allocator, .token = token_buffer };
+        var result = Telezig{.allocator = allocator, .token = undefined};
+        try getToken(token_path, &result.token);
+        return result;
     }
 
     // pub fn deinit(self: *Telezig) void {
@@ -44,16 +43,17 @@ pub const Telezig = struct {
         }
     }
 
-    fn getToken(token_path: []const u8, token_buffer: *[TOKEN_LENGTH]u8) !void {
+    fn getToken(token_path: []const u8, token_buffer: []u8) !void {
         const file = try std.fs.cwd().openFile(token_path, .{ .mode = .read_only });
         defer file.close();
-        _ = try file.reader().readAll(token_buffer[0..]);
+        const bytes_read = try file.reader().read(token_buffer);
+        if (bytes_read != token_buffer.len) return error.BadTokenFile;
     }
 
     fn getUpdates(self: Telezig) !Update {
         const host = "api.telegram.org";
         const path = "/bot{s}" ++ "/getUpdates?offset=-1";
-        var buffer = [_]u8{undefined} ** (host.len + path.len + TOKEN_LENGTH);
+        var buffer = [_]u8{undefined} ** (host.len + path.len + self.token.len);
         const formatted_path = try std.fmt.bufPrint(&buffer, path, .{self.token});
 
         var response = try request.makeGetRequestAlloc(self.allocator, host, formatted_path);
@@ -88,7 +88,7 @@ pub const Telezig = struct {
     pub fn sendMessage(self: Telezig, update: Update) !void {
         const host = "api.telegram.org";
         const path = "/bot{s}" ++ "/sendMessage";
-        var buffer = [_]u8{undefined} ** (host.len + path.len + TOKEN_LENGTH);
+        var buffer = [_]u8{undefined} ** (host.len + path.len + self.token.len);
         const formatted_path = try std.fmt.bufPrint(&buffer, path, .{self.token});
 
         const echo_complete = try std.fmt.allocPrint(self.allocator, "{{ \"chat_id\": {d}, \"text\": \"{s}\" }}", .{ update.chat_id, update.text });
@@ -105,10 +105,16 @@ fn onMessageReceived1(telezig: Telezig, update: Update) void {
 }
 
 test "Echobot test" {
+    // windows-only initialization
+    if (builtin.os.tag == std.Target.Os.Tag.windows) _ = try std.os.windows.WSAStartup(2, 0);
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
     //var allocator = std.testing.allocator;
     var telezig = try Telezig.init(allocator, "token.txt");
     try telezig.runEchoBot(10, onMessageReceived1);
+
+    // windows-only cleanup
+    if (builtin.os.tag == std.Target.Os.Tag.windows) try std.os.windows.WSACleanup();
 }
