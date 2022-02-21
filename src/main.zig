@@ -9,8 +9,6 @@ pub const Update = struct {
     text: []const u8,
 };
 
-pub const GetUpdatesError = error{NoMessages};
-
 pub const Telezig = struct {
     allocator: std.mem.Allocator,
     token: [46]u8,
@@ -42,9 +40,7 @@ pub const Telezig = struct {
 
         var result = tree.root.Object.get("result").?.Array;
 
-        if (result.items.len < 1) {
-            return GetUpdatesError.NoMessages;
-        }
+        if (result.items.len < 1) return error.NoUpdateMessages;
 
         var lastIndex = result.items.len - 1;
         var update_id = result.items[0].Object.get("update_id").?.Integer;
