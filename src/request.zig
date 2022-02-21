@@ -80,8 +80,6 @@ test "Get Request with a parameter" {
     var allocator = std.testing.allocator;
     const response = try makeGetRequestAlloc(allocator, "httpbin.org", "/get?name=telezig");
 
-    std.debug.print("{s}", .{response});
-
     var parser = std.json.Parser.init(allocator, false);
     defer parser.deinit();
 
@@ -108,8 +106,6 @@ test "Get Request with a parameter" {
 test "Post Request with a body" {
     var allocator = std.testing.allocator;
     const response = try makePostRequestAlloc(allocator, "httpbin.org", "/post", "{\"Post_Key\": \"Post_Value\"}", "Content-Type: application/json");
-
-    std.debug.print("{s}", .{response});
 
     var parser = std.json.Parser.init(allocator, false);
     defer parser.deinit();
