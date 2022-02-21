@@ -76,6 +76,71 @@ fn makeRequestAlloc(allocator: std.mem.Allocator,
     return html_contents;
 }
 
-// test "basic test" {
-//     try std.testing.expectEqual(10, 3 + 7);
-// }
+test "Get Request with a parameter" {
+    var allocator = std.testing.allocator;
+    const response = try makeGetRequestAlloc(allocator, "httpbin.org", "/get?name=telezig");
+
+    std.debug.print("{s}", .{response});
+
+    var parser = std.json.Parser.init(allocator, false);
+    defer parser.deinit();
+
+    var tree = try parser.parse(response);
+    defer tree.deinit();
+
+    const args = tree.root.Object.get("args").?;
+    const name_parameter = args.Object.get("name").?.String;
+    defer allocator.free(name_parameter);
+    try std.testing.expectEqualStrings("telezig", name_parameter);
+
+    const headers = tree.root.Object.get("headers").?;
+
+    const accept_header = headers.Object.get("Accept").?.String;
+    try std.testing.expectEqualStrings("*/*", accept_header);
+
+    const host_header = headers.Object.get("Host").?.String;
+    try std.testing.expectEqualStrings("httpbin.org", host_header);
+
+    const url = tree.root.Object.get("url").?.String;
+    try std.testing.expectEqualStrings("https://httpbin.org/get?name=telezig", url);
+}
+
+test "Post Request with a body" {
+    var allocator = std.testing.allocator;
+    const response = try makePostRequestAlloc(allocator, "httpbin.org", "/post", "{\"Post_Key\": \"Post_Value\"}", "Content-Type: application/json");
+
+    std.debug.print("{s}", .{response});
+
+    var parser = std.json.Parser.init(allocator, false);
+    defer parser.deinit();
+
+    var tree = try parser.parse(response);
+    defer tree.deinit();
+
+    const args = tree.root.Object.get("args").?;
+    try std.testing.expectEqual(@as(usize, 0), args.Object.count());
+
+    const headers = tree.root.Object.get("headers").?;
+
+    const accept_header = headers.Object.get("Accept").?.String;
+    try std.testing.expectEqualStrings("*/*", accept_header);
+
+    const host_header = headers.Object.get("Host").?.String;
+    try std.testing.expectEqualStrings("httpbin.org", host_header);
+
+    const content_length = headers.Object.get("Content-Length").?.String;
+    try std.testing.expectEqualStrings("26", content_length);
+
+    const content_type = headers.Object.get("Content-Type").?.String;
+    try std.testing.expectEqualStrings("application/json", content_type);
+
+    const url = tree.root.Object.get("url").?.String;
+    try std.testing.expectEqualStrings("https://httpbin.org/post", url);
+
+    const data = tree.root.Object.get("data").?.String;
+    try std.testing.expectEqualStrings("{\"Post_Key\": \"Post_Value\"}", data);
+
+    const post_value = tree.root.Object.get("json").?.Object.get("Post_Key").?.String;
+    defer allocator.free(post_value);
+    try std.testing.expectEqualStrings("Post_Value", post_value);
+}
