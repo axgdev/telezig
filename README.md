@@ -27,7 +27,7 @@ fn getToken(token_path: []const u8, buffer: []u8) !void {
 
 - Example of a echo bot loop
 ```zig
-// windows-only startup
+// Windows-only startup, this might not be needed in the future if fixed, see: https://github.com/ziglang/zig/issues/8943
 if (builtin.os.tag == std.Target.Os.Tag.windows) _ = try std.os.windows.WSAStartup(2, 0);
 
 var allocator = std.testing.allocator;
@@ -57,7 +57,7 @@ while (true) {
     std.time.sleep(sleep_seconds * std.time.ns_per_s);
 }
 
-// windows-only cleanup
+// Windows-only cleanup, this might not be needed in the future if fixed, see: https://github.com/ziglang/zig/issues/8943
 if (builtin.os.tag == std.Target.Os.Tag.windows) try std.os.windows.WSACleanup();
 ```
 ## Dependencies
