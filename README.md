@@ -38,10 +38,13 @@ try getToken("token.txt", token[0..]);
 var bot = try Telezig.init(allocator, token[0..]);
 
 var update_id: i64 = std.math.minInt(i64);
-var sleep_seconds: u8 = 10;
+var sleep_seconds: u64 = 10;
 // Here we run an infinite loop to get messages written to the bot and respond with the same text.
 // The only way to stop it is to kill the app
 while (true) {
+    // Sleep some seconds on each loop to not make too many requests to the Telegram API
+    std.time.sleep(sleep_seconds * std.time.ns_per_s);
+    
     // Get the updates from the Telegram API
     var update = try bot.getUpdates();
     defer bot.allocator.free(update.text);
@@ -53,8 +56,6 @@ while (true) {
 
     // Send the same message we received
     try bot.sendMessage(update);
-    // Sleep some seconds to not make too many requests to the Telegram API
-    std.time.sleep(sleep_seconds * std.time.ns_per_s);
 }
 
 // Windows-only cleanup, this might not be needed in the future if fixed, see: https://github.com/ziglang/zig/issues/8943
